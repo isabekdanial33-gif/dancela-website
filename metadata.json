@@ -1,0 +1,6 @@
+{
+  "name": "Dancela",
+  "description": "Официальный сайт премиальной студии спортивно-бальных танцев Dancela в Астане. Спортивное мастерство, выдающиеся тренеры и утонченный дизайн.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
