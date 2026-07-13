@@ -1,53 +1,64 @@
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
+// Firebase v12 SDK - Real Firebase Integration for Dancela
+import { initializeApp, getApps } from 'firebase/app';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup as _signInWithPopup,
+  signInWithEmailAndPassword as _signInWithEmailAndPassword,
+  createUserWithEmailAndPassword as _createUserWithEmailAndPassword,
+  signOut as _signOut,
+  onAuthStateChanged as _onAuthStateChanged,
+  RecaptchaVerifier as _RecaptchaVerifier,
+  signInWithPhoneNumber as _signInWithPhoneNumber,
+  PhoneAuthProvider as _PhoneAuthProvider,
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc 
+import {
+  getFirestore,
+  doc as _doc,
+  setDoc as _setDoc,
+  getDoc as _getDoc,
+  collection,
+  getDocs,
 } from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
-import firebaseConfigJson from '../../firebase-applet-config.json';
 
-// Combine environment variables with firebase-applet-config.json as fallback
-const metaEnv = (import.meta as any).env || {};
+// Firebase config from the real project credentials provided by the developer
 const firebaseConfig = {
-  apiKey: metaEnv.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
-  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
-  databaseURL: metaEnv.VITE_FIREBASE_DATABASE_URL || (firebaseConfigJson as any).databaseURL || "",
-  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
-  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
-  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
-  appId: metaEnv.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId,
-  measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID || (firebaseConfigJson as any).measurementId || "",
+  apiKey: "AIzaSyD7aJ5jb3ZpLVOl2DWXzUcIaDrPuuKEBXo",
+  authDomain: "dancela-messenger.firebaseapp.com",
+  databaseURL: "https://dancela-messenger-default-rtdb.firebaseio.com",
+  projectId: "dancela-messenger",
+  storageBucket: "dancela-messenger.firebasestorage.app",
+  messagingSenderId: "376383770466",
+  appId: "1:376383770466:web:6a7e3e7814d327c25b663b",
+  measurementId: "G-KMBY5ZWR5W"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const rtdb = getDatabase(app);
-const googleProvider = new GoogleAuthProvider();
+// Initialize Firebase (guard against double-init in HMR)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-export { 
-  app, 
-  auth, 
-  db, 
-  rtdb,
-  googleProvider,
-  signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  doc,
-  setDoc,
-  getDoc
-};
+// Auth
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+// Firestore
+export const db = getFirestore(app);
+
+// Realtime Database
+export const rtdb = getDatabase(app);
+
+// Re-export auth methods
+export const signInWithPopup = _signInWithPopup;
+export const signInWithEmailAndPassword = _signInWithEmailAndPassword;
+export const createUserWithEmailAndPassword = _createUserWithEmailAndPassword;
+export const signOut = _signOut;
+export const onAuthStateChanged = _onAuthStateChanged;
+export const RecaptchaVerifier = _RecaptchaVerifier;
+export const signInWithPhoneNumber = _signInWithPhoneNumber;
+export const PhoneAuthProvider = _PhoneAuthProvider;
+
+// Firestore helpers
+export const doc = _doc;
+export const setDoc = _setDoc;
+export const getDoc = _getDoc;

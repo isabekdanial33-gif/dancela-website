@@ -1,1 +1,99 @@
 @import "tailwindcss";
+
+/* ── Light mode overrides ──────────────────────────────────────────────────── */
+.light-mode {
+  --bg-primary: #f8fafc;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Override dark backgrounds to white/light in light mode */
+.light-mode .bg-black,
+.light-mode .dark\:bg-black {
+  background-color: #f8fafc !important;
+}
+
+.light-mode .bg-neutral-950,
+.light-mode .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+}
+
+.light-mode .text-slate-100,
+.light-mode .text-white {
+  color: #0f172a !important;
+}
+
+.light-mode .text-slate-400 {
+  color: #64748b !important;
+}
+
+.light-mode .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.light-mode .border-white\/5,
+.light-mode .border-white\/8,
+.light-mode .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+.light-mode .bg-white\/\[0\.01\],
+.light-mode .bg-white\/\[0\.02\],
+.light-mode .bg-white\/\[0\.03\] {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.light-mode .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.light-mode .bg-black\/80,
+.light-mode .bg-black\/95 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Navbar in light mode */
+.light-mode nav.sticky {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+.light-mode nav .text-slate-300,
+.light-mode nav .text-slate-400 {
+  color: #334155 !important;
+}
+
+.light-mode nav .text-white {
+  color: #0f172a !important;
+}
+
+/* Active nav pill in light mode */
+.light-mode nav .bg-white.text-black {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+/* Cards in light mode */
+.light-mode .rounded-3xl.border,
+.light-mode .rounded-2xl.border {
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.07) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+
+/* Smooth transitions */
+body, nav, main, footer, .rounded-3xl, .rounded-2xl {
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Custom scrollbar (dark) */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Light mode scrollbar */
+.light-mode ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+.light-mode ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
