@@ -13,6 +13,7 @@ import Contacts from './components/Contacts';
 import Profile from './components/Profile';
 import Settings from './components/Settings';
 import Auth from './components/Auth';
+import { Edit2, EyeOff } from 'lucide-react';
 
 import {
   Trainer, PriceItem, NewsItem, Tournament, ScheduleItem, GalleryItem, User,
@@ -164,9 +165,9 @@ export default function App() {
         {currentPage === 'about' && <About />}
         {currentPage === 'styles' && <Styles setCurrentPage={setCurrentPage} />}
         {currentPage === 'trainers' && <Trainers trainers={trainers} contactPhone={contactPhone} />}
-        {currentPage === 'gallery' && <Gallery galleryItems={galleryItems} />}
-        {currentPage === 'news' && <News news={news} />}
-        {currentPage === 'tournaments' && <Tournaments tournaments={tournaments} contactPhone={contactPhone} />}
+        {currentPage === 'gallery' && <Gallery galleryItems={galleryItems} setGalleryItems={setGalleryItems} editorMode={editorMode} />}
+        {currentPage === 'news' && <News news={news} setNews={setNews} editorMode={editorMode} />}
+        {currentPage === 'tournaments' && <Tournaments tournaments={tournaments} setTournaments={setTournaments} contactPhone={contactPhone} editorMode={editorMode} />}
         {currentPage === 'schedule' && <Schedule schedule={schedule} />}
         {currentPage === 'prices' && <Prices prices={prices} contactPhone={contactPhone} />}
         {currentPage === 'contacts' && <Contacts contactPhone={contactPhone} contactEmail={contactEmail} />}
@@ -189,6 +190,10 @@ export default function App() {
             setSchedule={setSchedule}
             galleryItems={galleryItems}
             setGalleryItems={setGalleryItems}
+            news={news}
+            setNews={setNews}
+            tournaments={tournaments}
+            setTournaments={setTournaments}
             contactPhone={contactPhone}
             setContactPhone={setContactPhone}
             contactEmail={contactEmail}
@@ -196,6 +201,44 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* ── Floating editor mode bar (admin only, visible on all pages) ── */}
+      {currentUser?.role === 'admin' && currentPage !== 'settings' && currentPage !== 'auth' && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-full border shadow-2xl backdrop-blur-md transition-all duration-300 ${
+            editorMode
+              ? 'bg-amber-500/15 border-amber-500/40 shadow-amber-500/10'
+              : 'bg-black/80 border-white/10'
+          }`}>
+            <span className="text-[10px] uppercase font-extrabold tracking-widest text-slate-400">
+              Редактор
+            </span>
+            <button
+              onClick={() => {
+                const next = !editorMode;
+                setEditorMode(next);
+                localStorage.setItem('dancela_editor_mode', JSON.stringify(next));
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                editorMode
+                  ? 'bg-amber-400 text-black'
+                  : 'bg-white/10 text-slate-300 hover:bg-white/15 hover:text-white'
+              }`}
+            >
+              {editorMode ? <Edit2 className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+              {editorMode ? 'Вкл' : 'Выкл'}
+            </button>
+            {editorMode && (
+              <button
+                onClick={() => setCurrentPage('settings')}
+                className="text-[10px] text-amber-400 hover:text-amber-300 font-bold uppercase tracking-wider transition-colors"
+              >
+                Настройки →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-white/5 dark:bg-neutral-950 light-mode:bg-slate-100 text-slate-400 py-16 px-4 sm:px-6 lg:px-8 selection:bg-amber-500/30 selection:text-amber-100 transition-colors duration-300">
