@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
-import { Sparkles, AlertCircle, Chrome, Phone, Mail, User as UserIcon, CheckCircle2, Lock } from 'lucide-react';
+import { Sparkles, AlertCircle, Chrome, Mail, User as UserIcon, CheckCircle2, Lock, Eye, EyeOff } from 'lucide-react';
 import { User } from '../types';
+import { 
+  auth, 
+  googleProvider, 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword 
+} from '../lib/firebase';
 
 interface AuthProps {
   onLoginSuccess: (user: User) => void;
@@ -10,30 +17,33 @@ interface AuthProps {
 }
 
 export default function Auth({ onLoginSuccess, setCurrentPage, contactPhone, contactEmail }: AuthProps) {
-  const [activeMethod, setActiveMethod] = useState<'google' | 'phone' | 'email'>('google');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [codeSent, setCodeSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  
-  // Google Selector State
-  const [showGoogleSelector, setShowGoogleSelector] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleName, setCustomGoogleName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const getCleanPhone = (phoneStr: string) => {
-    const digits = phoneStr.replace(/\D/g, '');
-    if (digits.startsWith('8')) {
-      return '7' + digits.substring(1);
-    }
-    if (digits.startsWith('+7')) {
-      return digits.substring(1);
-    }
-    return digits;
+    return phoneStr.replace(/\D/g, '');
+  };
+
+  const checkIsAdmin = (emailVal: string, phoneVal: string) => {
+    const cleanEmail = emailVal.trim().toLowerCase();
+    const cleanPhone = getCleanPhone(phoneVal);
+    
+    const targetEmail = contactEmail.trim().toLowerCase(); // Dancela2024@gmail.com
+    const targetPhone = getCleanPhone(contactPhone); // 77064069886
+    
+    const isEmailAdmin = cleanEmail === targetEmail;
+    const isPhoneAdmin = cleanPhone !== '' && (cleanPhone === targetPhone || cleanPhone === '8' + targetPhone.substring(1) || cleanPhone === '7' + targetPhone.substring(1));
+    
+    return isEmailAdmin || isPhoneAdmin;
   };
 
   const handleSuccessLogin = (user: User) => {
@@ -48,96 +58,120 @@ export default function Auth({ onLoginSuccess, setCurrentPage, contactPhone, con
     }, 1500);
   };
 
-  const handlePhoneSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    setErrorMessage('');
     setInfoMessage('');
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const fbUser = result.user;
+      
+      const emailVal = fbUser.email || '';
+      const phoneVal = fbUser.phoneNumber || '';
+      const isAdmin = checkIsAdmin(emailVal, phoneVal);
 
-    if (!codeSent) {
-      if (!phone.trim()) {
-        setInfoMessage('Пожалуйста, введите корректный номер телефона.');
-        return;
+      const loggedInUser: User = {
+        id: fbUser.uid,
+        email: emailVal,
+        name: fbUser.displayName || 'Пользователь Google',
+        role: isAdmin ? 'admin' : 'user',
+        createdAt: new Date().toISOString(),
+        phoneNumber: phoneVal,
+        bookedLessons: []
+      };
+
+      handleSuccessLogin(loggedInUser);
+    } catch (error: any) {
+      console.error("Google Auth Error:", error);
+      if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+        setErrorMessage('Окно авторизации Google было заблокировано браузером. Пожалуйста, откройте приложение в новой вкладке (кнопка сверху справа) и попробуйте снова.');
+      } else {
+        setErrorMessage(`Ошибка авторизации через Google: ${error.message || error}`);
       }
-      setCodeSent(true);
-      setInfoMessage('СМС-код отправлен! Для симуляции входа введите любой 4-значный код (например, 1234).');
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    if (code.length < 4) {
-      setInfoMessage('Введите 4-значный код подтверждения.');
-      return;
-    }
-
-    // Process Login
-    const cleanEntered = getCleanPhone(phone);
-    const cleanAdmin = getCleanPhone(contactPhone);
-    const isAdmin = cleanEntered === cleanAdmin && cleanAdmin !== '';
-
-    const displayName = name.trim() || (isAdmin ? 'Администратор студии' : 'Ученик Dancela');
-
-    const loggedInUser: User = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9),
-      email: isAdmin ? contactEmail : 'user@dancela.kz',
-      name: displayName,
-      role: isAdmin ? 'admin' : 'user',
-      createdAt: new Date().toISOString(),
-      phoneNumber: phone,
-      bookedLessons: []
-    };
-
-    handleSuccessLogin(loggedInUser);
   };
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     setInfoMessage('');
-
+    
     if (!email.trim() || !password.trim()) {
-      setInfoMessage('Пожалуйста, заполните все обязательные поля.');
+      setErrorMessage('Пожалуйста, заполните электронную почту и пароль.');
       return;
     }
 
-    const isAdmin = email.trim().toLowerCase() === contactEmail.trim().toLowerCase();
-    const displayName = name.trim() || (isAdmin ? 'Администратор студии' : 'Ученик Dancela');
+    setIsLoading(true);
+    try {
+      if (authMode === 'login') {
+        // Sign In
+        const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const fbUser = credential.user;
 
-    const loggedInUser: User = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9),
-      email: email.trim().toLowerCase(),
-      name: displayName,
-      role: isAdmin ? 'admin' : 'user',
-      createdAt: new Date().toISOString(),
-      phoneNumber: contactPhone,
-      bookedLessons: []
-    };
+        const isAdmin = checkIsAdmin(fbUser.email || '', fbUser.phoneNumber || '');
+        const loggedInUser: User = {
+          id: fbUser.uid,
+          email: fbUser.email || '',
+          name: fbUser.displayName || 'Ученик Dancela',
+          role: isAdmin ? 'admin' : 'user',
+          createdAt: new Date().toISOString(),
+          phoneNumber: fbUser.phoneNumber || '',
+          bookedLessons: []
+        };
+        handleSuccessLogin(loggedInUser);
+      } else {
+        // Register
+        if (password.length < 6) {
+          setErrorMessage('Пароль должен содержать не менее 6 символов.');
+          setIsLoading(false);
+          return;
+        }
 
-    handleSuccessLogin(loggedInUser);
-  };
+        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const fbUser = credential.user;
 
-  const handleGoogleSelect = (selectedEmail: string, selectedName: string) => {
-    const isAdmin = selectedEmail.trim().toLowerCase() === contactEmail.trim().toLowerCase();
-    
-    const loggedInUser: User = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9),
-      email: selectedEmail.trim().toLowerCase(),
-      name: selectedName || (isAdmin ? 'Администратор Google' : 'Ученик Google'),
-      role: isAdmin ? 'admin' : 'user',
-      createdAt: new Date().toISOString(),
-      bookedLessons: []
-    };
-
-    setShowGoogleSelector(false);
-    handleSuccessLogin(loggedInUser);
+        const isAdmin = checkIsAdmin(email, phone);
+        const loggedInUser: User = {
+          id: fbUser.uid,
+          email: email.trim().toLowerCase(),
+          name: name.trim() || 'Новый Ученик',
+          role: isAdmin ? 'admin' : 'user',
+          createdAt: new Date().toISOString(),
+          phoneNumber: phone,
+          bookedLessons: []
+        };
+        handleSuccessLogin(loggedInUser);
+      }
+    } catch (error: any) {
+      console.error("Email Auth Error:", error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setErrorMessage('Неверный email или пароль.');
+      } else if (error.code === 'auth/email-already-in-use') {
+        setErrorMessage('Этот адрес электронной почты уже используется другим аккаунтом.');
+      } else if (error.code === 'auth/invalid-email') {
+        setErrorMessage('Неверный формат адреса электронной почты.');
+      } else if (error.code === 'auth/weak-password') {
+        setErrorMessage('Пароль слишком слабый. Длина пароля должна быть не менее 6 символов.');
+      } else {
+        setErrorMessage(`Ошибка: ${error.message || error}`);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="py-20 px-4 sm:px-6 lg:px-8 selection:bg-amber-500/30 min-h-[80vh] flex items-center justify-center">
-      <div className="max-w-md w-full bg-white/[0.01] border border-white/5 rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden">
+    <div id="auth_page_container" className="py-20 px-4 sm:px-6 lg:px-8 selection:bg-amber-500/30 min-h-[80vh] flex items-center justify-center">
+      <div id="auth_card" className="max-w-md w-full bg-white/[0.01] border border-white/5 rounded-3xl p-8 sm:p-10 shadow-2xl relative overflow-hidden">
         
         {/* Glow orb */}
         <div className="absolute top-[-20%] left-[-20%] w-[200px] h-[200px] rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
 
         {/* Success screen */}
         {successMessage ? (
-          <div className="text-center py-12 relative z-10 animate-fade-in">
+          <div id="auth_success_screen" className="text-center py-12 relative z-10 animate-fade-in">
             <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="w-8 h-8 text-emerald-400" />
             </div>
@@ -151,21 +185,23 @@ export default function Auth({ onLoginSuccess, setCurrentPage, contactPhone, con
         ) : (
           <>
             {/* Header */}
-            <div className="text-center mb-8 relative z-10">
+            <div id="auth_header" className="text-center mb-8 relative z-10">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[9px] uppercase tracking-widest font-extrabold rounded-full mb-4">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Панель Авторизации</span>
+                <span>Реальный Firebase Вход</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
-                Вход в систему
+                {authMode === 'login' ? 'Вход в систему' : 'Регистрация'}
               </h2>
               <p className="text-xs text-slate-400 mt-2">
-                Для доступа к управлению настройками (редактору) используйте контакты администратора.
+                {authMode === 'login' 
+                  ? 'Войдите в личный кабинет ученика или панель управления.' 
+                  : 'Зарегистрируйте новый личный кабинет для записи на занятия.'}
               </p>
             </div>
 
             {/* Helper Hint */}
-            <div className="mb-6 p-4 bg-slate-900/50 border border-white/5 rounded-2xl flex items-start gap-2.5 text-[10px] leading-relaxed text-slate-300">
+            <div id="auth_helper_hint" className="mb-6 p-4 bg-slate-900/50 border border-white/5 rounded-2xl flex items-start gap-2.5 text-[10px] leading-relaxed text-slate-300">
               <Lock className="w-5 h-5 shrink-0 text-amber-400" />
               <div>
                 <span className="font-extrabold text-white uppercase tracking-wider block mb-0.5">Доступ администратора:</span>
@@ -175,215 +211,161 @@ export default function Auth({ onLoginSuccess, setCurrentPage, contactPhone, con
               </div>
             </div>
 
+            {/* Error banner */}
+            {errorMessage && (
+              <div id="auth_error_banner" className="mb-6 p-4 bg-rose-950/40 border border-rose-500/20 rounded-2xl flex items-start gap-2.5 text-xs text-rose-300 animate-fade-in">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-400" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
             {/* Info banner */}
             {infoMessage && (
-              <div className="mb-6 p-4 bg-amber-950/40 border border-amber-500/20 rounded-2xl flex items-start gap-2.5 text-xs text-amber-300 animate-fade-in">
+              <div id="auth_info_banner" className="mb-6 p-4 bg-amber-950/40 border border-amber-500/20 rounded-2xl flex items-start gap-2.5 text-xs text-amber-300 animate-fade-in">
                 <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-400" />
                 <span>{infoMessage}</span>
               </div>
             )}
 
-            {/* Tab selection bar */}
-            <div className="grid grid-cols-3 gap-2 mb-8 bg-white/[0.02] p-1 rounded-xl border border-white/5 relative z-10">
-              {[
-                { id: 'google', label: 'Google', icon: Chrome },
-                { id: 'phone', label: 'Телефон', icon: Phone },
-                { id: 'email', label: 'Email', icon: Mail }
-              ].map((method) => {
-                const Icon = method.icon;
-                const isSel = activeMethod === method.id;
-                return (
-                  <button
-                    key={method.id}
-                    onClick={() => {
-                      setActiveMethod(method.id as any);
-                      setInfoMessage('');
-                      setShowGoogleSelector(false);
-                    }}
-                    className={`py-2 px-3 rounded-lg text-[10px] uppercase tracking-wider font-extrabold transition-all flex flex-col items-center gap-1.5 ${
-                      isSel
-                        ? 'bg-amber-400 text-black font-black font-extrabold'
-                        : 'text-slate-400 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{method.label}</span>
-                  </button>
-                );
-              })}
+            {/* Mode selection tabs */}
+            <div className="grid grid-cols-2 gap-2 mb-6 bg-white/[0.02] p-1 rounded-xl border border-white/5 relative z-10">
+              <button
+                id="tab_login"
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setErrorMessage('');
+                  setInfoMessage('');
+                }}
+                className={`py-2 px-3 rounded-lg text-xs uppercase tracking-wider font-extrabold transition-all text-center ${
+                  authMode === 'login'
+                    ? 'bg-amber-400 text-black font-black'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Войти
+              </button>
+              <button
+                id="tab_register"
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setErrorMessage('');
+                  setInfoMessage('');
+                }}
+                className={`py-2 px-3 rounded-lg text-xs uppercase tracking-wider font-extrabold transition-all text-center ${
+                  authMode === 'register'
+                    ? 'bg-amber-400 text-black font-black'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                Регистрация
+              </button>
             </div>
 
-            {/* Render active method form */}
-            <div className="relative z-10">
-              
-              {/* Google Method */}
-              {activeMethod === 'google' && (
-                <div className="space-y-4">
-                  {!showGoogleSelector ? (
-                    <>
-                      <p className="text-xs text-slate-400 text-center leading-relaxed">
-                        Войдите с помощью вашей учетной записи Google для мгновенного и безопасного доступа.
-                      </p>
-                      <button
-                        onClick={() => setShowGoogleSelector(true)}
-                        className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-black font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg active:scale-95 cursor-pointer"
-                      >
-                        <Chrome className="w-4 h-4" />
-                        <span>Войти через Google</span>
-                      </button>
-                    </>
-                  ) : (
-                    <div className="bg-black/40 border border-white/5 p-5 rounded-2xl space-y-4 animate-fade-in">
-                      <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center">Выбор аккаунта Google:</h4>
-                      
-                      <button
-                        onClick={() => handleGoogleSelect(contactEmail, 'Главный Администратор')}
-                        className="w-full p-3.5 bg-amber-500/10 border border-amber-500/20 hover:border-amber-400/50 rounded-xl text-left transition-all flex items-center gap-3"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-amber-400 text-black font-black flex items-center justify-center shrink-0">
-                          А
-                        </div>
-                        <div className="truncate">
-                          <p className="text-xs text-white font-black">Администратор (Студия)</p>
-                          <p className="text-[10px] text-amber-400 font-mono truncate">{contactEmail}</p>
-                        </div>
-                      </button>
+            {/* Google Login Button */}
+            <div className="mb-6 relative z-10">
+              <button
+                id="google_auth_btn"
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+                className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 disabled:opacity-50 text-black font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg active:scale-95 cursor-pointer"
+              >
+                <Chrome className="w-4 h-4 text-rose-500" />
+                <span>{isLoading ? 'Загрузка...' : 'Войти через Google'}</span>
+              </button>
+              <div className="relative flex py-4 items-center">
+                <div className="flex-grow border-t border-white/5"></div>
+                <span className="flex-shrink mx-4 text-slate-500 text-[10px] uppercase font-bold tracking-wider">или по электронной почте</span>
+                <div className="flex-grow border-t border-white/5"></div>
+              </div>
+            </div>
 
-                      <button
-                        onClick={() => handleGoogleSelect('isabekdanial34@gmail.com', 'Даниал Исабек')}
-                        className="w-full p-3.5 bg-white/[0.01] border border-white/5 hover:border-white/10 rounded-xl text-left transition-all flex items-center gap-3"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-slate-700 text-white font-black flex items-center justify-center shrink-0">
-                          Д
-                        </div>
-                        <div className="truncate">
-                          <p className="text-xs text-white font-black">Даниал Исабек (Пользователь)</p>
-                          <p className="text-[10px] text-slate-400 font-mono truncate">isabekdanial34@gmail.com</p>
-                        </div>
-                      </button>
-
-                      <div className="border-t border-white/5 pt-3 space-y-3">
-                        <p className="text-[9px] uppercase tracking-wider text-slate-500 font-bold text-center">Или войти с произвольного Google аккаунта:</p>
-                        <input
-                          type="text"
-                          placeholder="Ваше Имя"
-                          value={customGoogleName}
-                          onChange={(e) => setCustomGoogleName(e.target.value)}
-                          className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-2 px-3 text-xs font-semibold text-slate-200 transition-colors"
-                        />
-                        <input
-                          type="email"
-                          placeholder="example@gmail.com"
-                          value={customGoogleEmail}
-                          onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                          className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-2 px-3 text-xs font-semibold text-slate-200 transition-colors"
-                        />
-                        <button
-                          onClick={() => handleGoogleSelect(customGoogleEmail || 'guest@gmail.com', customGoogleName || 'Гость')}
-                          className="w-full py-2.5 bg-white text-black font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all"
-                        >
-                          Использовать этот аккаунт
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Phone Method */}
-              {activeMethod === 'phone' && (
-                <form onSubmit={handlePhoneSubmit} className="space-y-4">
+            {/* Email Form */}
+            <form onSubmit={handleEmailSubmit} className="space-y-4 relative z-10">
+              {authMode === 'register' && (
+                <>
                   <div>
                     <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Ваше ФИО:</label>
-                    <input
-                      type="text"
-                      placeholder="Иван Иванов (Необязательно)"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 px-4 text-xs font-semibold text-slate-200 transition-colors mb-4"
-                    />
-
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Номер телефона:</label>
-                    <input
-                      type="tel"
-                      placeholder={contactPhone}
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 px-4 text-xs font-semibold text-slate-200 transition-colors"
-                      required
-                    />
-                  </div>
-
-                  {codeSent && (
-                    <div className="animate-fade-in">
-                      <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Код из СМС:</label>
+                    <div className="relative">
+                      <UserIcon className="absolute left-4 top-3.5 w-4 h-4 text-slate-500" />
                       <input
+                        id="register_name"
                         type="text"
-                        placeholder="1234"
-                        value={code}
-                        onChange={(e) => setCode(e.target.value)}
-                        className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 px-4 text-xs font-semibold text-slate-200 transition-colors"
+                        placeholder="Иван Иванов"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 pl-11 pr-4 text-xs font-semibold text-slate-200 transition-colors"
                         required
                       />
                     </div>
-                  )}
+                  </div>
 
-                  <button
-                    type="submit"
-                    className="w-full mt-4 py-4 px-4 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all duration-300 shadow-lg shadow-amber-500/10 active:scale-95 cursor-pointer"
-                  >
-                    {codeSent ? 'Подтвердить код' : 'Получить СМС-код'}
-                  </button>
-                </form>
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Номер телефона:</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-3.5 text-xs text-slate-500 font-bold">+7</span>
+                      <input
+                        id="register_phone"
+                        type="tel"
+                        placeholder="(706) 406-98-86"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 pl-10 pr-4 text-xs font-semibold text-slate-200 transition-colors"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
 
-              {/* Email Method */}
-              {activeMethod === 'email' && (
-                <form onSubmit={handleEmailSubmit} className="space-y-4">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Ваше ФИО:</label>
-                    <input
-                      type="text"
-                      placeholder="Иван Иванов (Необязательно)"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 px-4 text-xs font-semibold text-slate-200 transition-colors"
-                    />
-                  </div>
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Электронная Почта:</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-3.5 w-4 h-4 text-slate-500" />
+                  <input
+                    id="auth_email"
+                    type="email"
+                    placeholder={contactEmail}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 pl-11 pr-4 text-xs font-semibold text-slate-200 transition-colors"
+                    required
+                  />
+                </div>
+              </div>
 
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Электронная Почта:</label>
-                    <input
-                      type="email"
-                      placeholder={contactEmail}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 px-4 text-xs font-semibold text-slate-200 transition-colors"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Пароль:</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 px-4 text-xs font-semibold text-slate-200 transition-colors"
-                      required
-                    />
-                  </div>
-
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-2">Пароль:</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-3.5 w-4 h-4 text-slate-500" />
+                  <input
+                    id="auth_password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 focus:border-amber-500/50 outline-none rounded-xl py-3 pl-11 pr-12 text-xs font-semibold text-slate-200 transition-colors"
+                    required
+                  />
                   <button
-                    type="submit"
-                    className="w-full mt-4 py-4 px-4 bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all duration-300 shadow-lg shadow-amber-500/10 active:scale-95 cursor-pointer"
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors"
                   >
-                    Войти по Email
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
-                </form>
-              )}
-            </div>
+                </div>
+              </div>
+
+              <button
+                id="submit_auth_form"
+                type="submit"
+                disabled={isLoading}
+                className="w-full mt-4 py-4 px-4 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-black font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all duration-300 shadow-lg shadow-amber-500/10 active:scale-95 cursor-pointer"
+              >
+                {isLoading ? 'Загрузка...' : authMode === 'login' ? 'Войти в аккаунт' : 'Создать аккаунт'}
+              </button>
+            </form>
           </>
         )}
 

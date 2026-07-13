@@ -20,6 +20,10 @@ import {
 } from './types';
 
 import { 
+  auth, signOut 
+} from './lib/firebase';
+
+import { 
   Award, MapPin, Phone, Instagram, ShieldCheck, Heart, Mail 
 } from 'lucide-react';
 
@@ -126,6 +130,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    signOut(auth).catch(err => console.error("Firebase SignOut Error: ", err));
     setCurrentUser(null);
     setCurrentPage('home');
   };
